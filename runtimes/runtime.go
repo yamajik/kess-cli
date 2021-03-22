@@ -10,6 +10,7 @@ type Runtime interface {
 	Install(ctx context.Context) error
 	Uninstall(ctx context.Context) error
 	Run(ctx context.Context, options RuntimeRunOptions) error
+	// RunProcess(ctx context.Context, options RuntimeRunProcessOptions) error
 	Remove(ctx context.Context, options RuntimeRemoveOptions) error
 }
 
@@ -25,6 +26,13 @@ type RuntimeRunOptions struct {
 	Image string
 	Cmd   []string
 	Port  string
+}
+
+type RuntimeRunProcessOptions struct {
+	Name string
+	Cmd  []string
+	Port string
+	Pwd  string
 }
 
 type RuntimeRemoveOptions struct {

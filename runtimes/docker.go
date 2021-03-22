@@ -7,6 +7,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -17,7 +18,7 @@ import (
 
 var (
 	DefaultDockerRuntimeNetwork = "kess"
-	DefaultDockerRuntimeVolumes = []string{"kess-components"}
+	DefaultDockerRuntimeVolumes = []string{"kess-configs"}
 
 	DefaultDockerRuntimeRedisName    = "kess-system-redis"
 	DefaultDockerRuntimeRedisImage   = "redis:alpine"
@@ -33,15 +34,15 @@ var (
 
 	DefaultDockerRuntimePlacementName    = "kess-system-placement"
 	DefaultDockerRuntimePlacementImage   = "daprio/dapr"
-	DefaultDockerRuntimePlacementCmd     = []string{"./placement", "--port", "50006"}
-	DefaultDockerRuntimePlacementPorts   = []string{"50006:50006"}
+	DefaultDockerRuntimePlacementCmd     = []string{"./placement", "--port", "50005"}
+	DefaultDockerRuntimePlacementPorts   = []string{"50005:50005"}
 	DefaultDockerRuntimePlacementNetwork = DefaultDockerRuntimeNetwork
 
 	DefaultDockerRuntimeIngressName  = "kess-system-ingress"
 	DefaultDockerRuntimeIngressImage = "daprio/daprd:edge"
 	DefaultDockerRuntimeIngressCmd   = []string{
 		"./daprd",
-		"--placement-host-address", "kess-system-placement:50006",
+		"--placement-host-address", "kess-system-placement:50005",
 		"--components-path", "/components",
 		"--app-id", "ingress",
 		"--dapr-http-port", "3500",
@@ -54,11 +55,12 @@ var (
 	DefaultDockerRuntimeSidecarImage = "daprio/daprd:edge"
 	DefaultDockerRuntimeSidecarCmd   = []string{
 		"./daprd",
-		"--placement-host-address", "kess-system-placement:50006",
-		"--components-path", "/components",
+		"--placement-host-address", "kess-system-placement:50005",
+		"--components-path", "/kess-configs/components",
+		"--config", "/kess-configs/config.yaml",
 	}
 	DefaultDockerRuntimeSidecarNetwork = "container:{Name}"
-	DefaultDockerRuntimeSidecarVolumes = []string{"kess-components:/components"}
+	DefaultDockerRuntimeSidecarVolumes = []string{"kess-configs:/kess-configs"}
 
 	DefaultDockerRuntimeAppName    = "kess-app-{Name}"
 	DefaultDockerRuntimeAppNetwork = DefaultDockerRuntimeNetwork
@@ -299,6 +301,9 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 		Cmd:     r.config.Redis.Cmd,
 		Network: r.config.Redis.Network,
 		Ports:   r.config.Redis.Ports,
+		Labels: r.labels(map[string]string{
+			"kess-system": "redis",
+		}),
 	}); err != nil {
 		return err
 	}
@@ -309,6 +314,9 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 		Cmd:     r.config.Zipkin.Cmd,
 		Network: r.config.Zipkin.Network,
 		Ports:   r.config.Zipkin.Ports,
+		Labels: r.labels(map[string]string{
+			"kess-system": "zipkin",
+		}),
 	}); err != nil {
 		return err
 	}
@@ -319,6 +327,9 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 		Cmd:     r.config.Placement.Cmd,
 		Network: r.config.Placement.Network,
 		Ports:   r.config.Placement.Ports,
+		Labels: r.labels(map[string]string{
+			"kess-system": "placement",
+		}),
 	}); err != nil {
 		return err
 	}
@@ -329,6 +340,9 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 		Cmd:     r.config.Ingress.Cmd,
 		Network: r.config.Ingress.Network,
 		Ports:   r.config.Ingress.Ports,
+		Labels: r.labels(map[string]string{
+			"kess-system": "ingress",
+		}),
 	}); err != nil {
 		return err
 	}
@@ -337,30 +351,39 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 }
 
 func (r *DockerRuntime) Uninstall(ctx context.Context) error {
-	if err := r.removeContainer(ctx, r.config.Ingress.Name); err != nil {
+	filters := filters.NewArgs(filters.Arg("label", "kess"))
+
+	containers, err := r.client.ContainerList(ctx, types.ContainerListOptions{All: true, Filters: filters})
+	if err != nil {
 		return err
 	}
 
-	if err := r.removeContainer(ctx, r.config.Placement.Name); err != nil {
-		return err
-	}
-
-	if err := r.removeContainer(ctx, r.config.Zipkin.Name); err != nil {
-		return err
-	}
-
-	if err := r.removeContainer(ctx, r.config.Redis.Name); err != nil {
-		return err
-	}
-
-	for _, volume := range r.config.Volumes {
-		if err := r.removeVolume(ctx, volume); err != nil {
+	for _, container := range containers {
+		if err := r.removeContainer(ctx, container.ID); err != nil {
 			return err
 		}
 	}
 
-	if err := r.removeNetwork(ctx, r.config.Network); err != nil {
+	volumesResp, err := r.client.VolumeList(ctx, filters)
+	if err != nil {
 		return err
+	}
+
+	for _, volume := range volumesResp.Volumes {
+		if err := r.removeVolume(ctx, volume.Name); err != nil {
+			return err
+		}
+	}
+
+	networks, err := r.client.NetworkList(ctx, types.NetworkListOptions{Filters: filters})
+	if err != nil {
+		return err
+	}
+
+	for _, network := range networks {
+		if err := r.removeNetwork(ctx, network.ID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -380,6 +403,9 @@ func (r *DockerRuntime) Run(ctx context.Context, options RuntimeRunOptions) erro
 		Cmd:     options.Cmd,
 		Network: r.config.App.Network,
 		Volumes: r.config.App.Volumes,
+		Labels: r.labels(map[string]string{
+			"kess-app": options.Name,
+		}),
 	}); err != nil {
 		return err
 	}
@@ -390,6 +416,10 @@ func (r *DockerRuntime) Run(ctx context.Context, options RuntimeRunOptions) erro
 		Cmd:     append(r.config.Sidecar.Cmd, "--app-id", options.Name, "--app-port", options.Port),
 		Network: r.renderName(r.config.Sidecar.Network, map[string]interface{}{"Name": appContainerName}),
 		Volumes: r.config.Sidecar.Volumes,
+		Labels: r.labels(map[string]string{
+			"kess-app":         options.Name,
+			"kess-app-sidecar": options.Name,
+		}),
 	}); err != nil {
 		return err
 	}
@@ -423,6 +453,7 @@ type DockerRuntimeRunContainerOptions struct {
 	Ports   []string
 	Volumes []string
 	Links   []string
+	Labels  map[string]string
 }
 
 func (r *DockerRuntime) runContainer(ctx context.Context, options DockerRuntimeRunContainerOptions) error {
@@ -448,6 +479,7 @@ func (r *DockerRuntime) runContainer(ctx context.Context, options DockerRuntimeR
 		Image:        options.Image,
 		Cmd:          options.Cmd,
 		ExposedPorts: exposedports,
+		Labels:       options.Labels,
 	}, &container.HostConfig{
 		NetworkMode:   container.NetworkMode(options.Network),
 		PortBindings:  portbindings,
@@ -476,7 +508,7 @@ func (r *DockerRuntime) removeContainer(ctx context.Context, name string) error 
 
 func (r *DockerRuntime) createNetwork(ctx context.Context, name string) error {
 	if _, err := r.client.NetworkInspect(ctx, name, types.NetworkInspectOptions{}); err != nil {
-		if _, err := r.client.NetworkCreate(ctx, name, types.NetworkCreate{}); err != nil {
+		if _, err := r.client.NetworkCreate(ctx, name, types.NetworkCreate{Labels: r.labels(nil)}); err != nil {
 			return errors.WithStack(err)
 		}
 	}
@@ -494,7 +526,7 @@ func (r *DockerRuntime) removeVolume(ctx context.Context, name string) error {
 
 func (r *DockerRuntime) createVolume(ctx context.Context, name string) error {
 	if _, err := r.client.VolumeInspect(ctx, name); err != nil {
-		if _, err := r.client.VolumeCreate(ctx, volume.VolumeCreateBody{Name: name}); err != nil {
+		if _, err := r.client.VolumeCreate(ctx, volume.VolumeCreateBody{Name: name, Labels: r.labels(nil)}); err != nil {
 			return errors.WithStack(err)
 		}
 	}
@@ -508,4 +540,12 @@ func (r *DockerRuntime) removeNetwork(ctx context.Context, name string) error {
 		}
 	}
 	return nil
+}
+
+func (r *DockerRuntime) labels(m map[string]string) map[string]string {
+	l := map[string]string{"kess": ""}
+	for k, v := range m {
+		l[k] = v
+	}
+	return l
 }

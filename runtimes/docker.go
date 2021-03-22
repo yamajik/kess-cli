@@ -25,6 +25,12 @@ var (
 	DefaultDockerRuntimeRedisPorts   = []string{"6379:6379"}
 	DefaultDockerRuntimeRedisNetwork = DefaultDockerRuntimeNetwork
 
+	DefaultDockerRuntimeZipkinName    = "kess-system-zipkin"
+	DefaultDockerRuntimeZipkinImage   = "openzipkin/zipkin:latest"
+	DefaultDockerRuntimeZipkinCmd     = []string{""}
+	DefaultDockerRuntimeZipkinPorts   = []string{"9411:9411"}
+	DefaultDockerRuntimeZipkinNetwork = DefaultDockerRuntimeNetwork
+
 	DefaultDockerRuntimePlacementName    = "kess-system-placement"
 	DefaultDockerRuntimePlacementImage   = "daprio/dapr"
 	DefaultDockerRuntimePlacementCmd     = []string{"./placement", "--port", "50006"}
@@ -82,6 +88,33 @@ func (c *DockerRuntimeRedisConfig) Default() error {
 	}
 	if c.Network == "" {
 		c.Network = DefaultDockerRuntimeRedisNetwork
+	}
+	return nil
+}
+
+type DockerRuntimeZipkinConfig struct {
+	Name    string
+	Image   string
+	Cmd     []string
+	Network string
+	Ports   []string
+}
+
+func (c *DockerRuntimeZipkinConfig) Default() error {
+	if c.Name == "" {
+		c.Name = DefaultDockerRuntimeZipkinName
+	}
+	if c.Image == "" {
+		c.Image = DefaultDockerRuntimeZipkinImage
+	}
+	if len(c.Cmd) == 0 {
+		c.Cmd = DefaultDockerRuntimeZipkinCmd
+	}
+	if len(c.Ports) == 0 {
+		c.Ports = DefaultDockerRuntimeZipkinPorts
+	}
+	if c.Network == "" {
+		c.Network = DefaultDockerRuntimeZipkinNetwork
 	}
 	return nil
 }
@@ -191,6 +224,7 @@ type DockerRuntimeConfig struct {
 	Network   string
 	Volumes   []string
 	Redis     DockerRuntimeRedisConfig
+	Zipkin    DockerRuntimeZipkinConfig
 	Placement DockerRuntimePlacementConfig
 	Ingress   DockerRuntimeIngressConfig
 	Sidecar   DockerRuntimeSidecarConfig
@@ -204,10 +238,13 @@ func (c *DockerRuntimeConfig) Default() error {
 	if len(c.Volumes) == 0 {
 		c.Volumes = DefaultDockerRuntimeVolumes
 	}
-	if err := c.Placement.Default(); err != nil {
+	if err := c.Redis.Default(); err != nil {
 		return err
 	}
-	if err := c.Redis.Default(); err != nil {
+	if err := c.Zipkin.Default(); err != nil {
+		return err
+	}
+	if err := c.Placement.Default(); err != nil {
 		return err
 	}
 	if err := c.Ingress.Default(); err != nil {
@@ -267,6 +304,16 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 	}
 
 	if err := r.runContainer(ctx, DockerRuntimeRunContainerOptions{
+		Name:    r.config.Zipkin.Name,
+		Image:   r.config.Zipkin.Image,
+		Cmd:     r.config.Zipkin.Cmd,
+		Network: r.config.Zipkin.Network,
+		Ports:   r.config.Zipkin.Ports,
+	}); err != nil {
+		return err
+	}
+
+	if err := r.runContainer(ctx, DockerRuntimeRunContainerOptions{
 		Name:    r.config.Placement.Name,
 		Image:   r.config.Placement.Image,
 		Cmd:     r.config.Placement.Cmd,
@@ -295,6 +342,10 @@ func (r *DockerRuntime) Uninstall(ctx context.Context) error {
 	}
 
 	if err := r.removeContainer(ctx, r.config.Placement.Name); err != nil {
+		return err
+	}
+
+	if err := r.removeContainer(ctx, r.config.Zipkin.Name); err != nil {
 		return err
 	}
 

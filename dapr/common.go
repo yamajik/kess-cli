@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DefaultDaprDirname               = ".dapr"
+	DefaultDaprDirname               = ".kess"
 	DefaultDaprBinDirname            = "bin"
 	DefaultDaprComponentsDirname     = "components"
 	DefaultDaprConfigurationFilename = "config.yaml"

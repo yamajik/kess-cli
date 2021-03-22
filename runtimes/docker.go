@@ -2,8 +2,12 @@ package runtimes
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -14,42 +18,56 @@ import (
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasttemplate"
+	"github.com/yamajik/kess/dapr"
 )
 
 var (
 	DefaultDockerRuntimeNetwork = "kess"
 	DefaultDockerRuntimeVolumes = []string{"kess-configs"}
 
-	DefaultDockerRuntimeRedisName    = "kess-system-redis"
-	DefaultDockerRuntimeRedisImage   = "redis:alpine"
-	DefaultDockerRuntimeRedisCmd     = []string{"redis-server"}
-	DefaultDockerRuntimeRedisPorts   = []string{"6379:6379"}
-	DefaultDockerRuntimeRedisNetwork = DefaultDockerRuntimeNetwork
+	DefaultDockerRuntimeToolsName  = "kess-tools-{Time}"
+	DefaultDockerRuntimeToolsImage = "alpine:latest"
+	DefaultDockerRuntimeToolsCmd   = []string{"sleep", "infinity"}
 
-	DefaultDockerRuntimeZipkinName    = "kess-system-zipkin"
-	DefaultDockerRuntimeZipkinImage   = "openzipkin/zipkin:latest"
-	DefaultDockerRuntimeZipkinCmd     = []string{""}
-	DefaultDockerRuntimeZipkinPorts   = []string{"9411:9411"}
-	DefaultDockerRuntimeZipkinNetwork = DefaultDockerRuntimeNetwork
+	DefaultDockerRuntimeRedisName         = "kess-system-redis"
+	DefaultDockerRuntimeRedisImage        = "redis:alpine"
+	DefaultDockerRuntimeRedisCmd          = []string{"redis-server"}
+	DefaultDockerRuntimeRedisNetwork      = DefaultDockerRuntimeNetwork
+	DefaultDockerRuntimeRedisPorts        = []string{"50003:6379"}
+	DefaultDockerRuntimeRedisExternalHost = "localhost:50003"
+	DefaultDockerRuntimeRedisInternalHost = "kess-system-redis:6379"
+	DefaultDockerRuntimeRedisPassword     = ""
 
-	DefaultDockerRuntimePlacementName    = "kess-system-placement"
-	DefaultDockerRuntimePlacementImage   = "daprio/dapr"
-	DefaultDockerRuntimePlacementCmd     = []string{"./placement", "--port", "50005"}
-	DefaultDockerRuntimePlacementPorts   = []string{"50005:50005"}
-	DefaultDockerRuntimePlacementNetwork = DefaultDockerRuntimeNetwork
+	DefaultDockerRuntimeZipkinName         = "kess-system-zipkin"
+	DefaultDockerRuntimeZipkinImage        = "openzipkin/zipkin:latest"
+	DefaultDockerRuntimeZipkinCmd          = []string{""}
+	DefaultDockerRuntimeZipkinNetwork      = DefaultDockerRuntimeNetwork
+	DefaultDockerRuntimeZipkinPorts        = []string{"50004:9411"}
+	DefaultDockerRuntimeZipkinExternalHost = "localhost:50004"
+	DefaultDockerRuntimeZipkinInternalHost = "kess-system-zipkin:9411"
+
+	DefaultDockerRuntimePlacementName         = "kess-system-placement"
+	DefaultDockerRuntimePlacementImage        = "daprio/dapr"
+	DefaultDockerRuntimePlacementCmd          = []string{"./placement"}
+	DefaultDockerRuntimePlacementNetwork      = DefaultDockerRuntimeNetwork
+	DefaultDockerRuntimePlacementPorts        = []string{"50005:50005"}
+	DefaultDockerRuntimePlacementExternalHost = "localhost:50005"
+	DefaultDockerRuntimePlacementInternalHost = "kess-system-placement:50005"
 
 	DefaultDockerRuntimeIngressName  = "kess-system-ingress"
 	DefaultDockerRuntimeIngressImage = "daprio/daprd:edge"
 	DefaultDockerRuntimeIngressCmd   = []string{
 		"./daprd",
 		"--placement-host-address", "kess-system-placement:50005",
-		"--components-path", "/components",
+		"--components-path", "/kess-configs/components",
+		"--config", "/kess-configs/config.yaml",
 		"--app-id", "ingress",
-		"--dapr-http-port", "3500",
 		"--dapr-grpc-port", "50001",
+		"--dapr-http-port", "50002",
 	}
-	DefaultDockerRuntimeIngressPorts   = []string{"3500:3500", "50001:50001"}
 	DefaultDockerRuntimeIngressNetwork = DefaultDockerRuntimeNetwork
+	DefaultDockerRuntimeIngressPorts   = []string{"50001:50001", "50002:50002"}
+	DefaultDockerRuntimeIngressVolumes = []string{"kess-configs:/kess-configs"}
 
 	DefaultDockerRuntimeSidecarName  = "kess-app-{Name}-sidecar"
 	DefaultDockerRuntimeSidecarImage = "daprio/daprd:edge"
@@ -67,12 +85,34 @@ var (
 	DefaultDockerRuntimeAppVolumes = []string{}
 )
 
+type DockerRuntimeToolsConfig struct {
+	Name  string
+	Image string
+	Cmd   []string
+}
+
+func (c *DockerRuntimeToolsConfig) Default() error {
+	if c.Name == "" {
+		c.Name = DefaultDockerRuntimeToolsName
+	}
+	if c.Image == "" {
+		c.Image = DefaultDockerRuntimeToolsImage
+	}
+	if len(c.Cmd) == 0 {
+		c.Cmd = DefaultDockerRuntimeToolsCmd
+	}
+	return nil
+}
+
 type DockerRuntimeRedisConfig struct {
-	Name    string
-	Image   string
-	Cmd     []string
-	Network string
-	Ports   []string
+	Name         string
+	Image        string
+	Cmd          []string
+	Network      string
+	Ports        []string
+	ExternalHost string
+	InternalHost string
+	Password     string
 }
 
 func (c *DockerRuntimeRedisConfig) Default() error {
@@ -91,15 +131,26 @@ func (c *DockerRuntimeRedisConfig) Default() error {
 	if c.Network == "" {
 		c.Network = DefaultDockerRuntimeRedisNetwork
 	}
+	if c.ExternalHost == "" {
+		c.ExternalHost = DefaultDockerRuntimeRedisExternalHost
+	}
+	if c.InternalHost == "" {
+		c.InternalHost = DefaultDockerRuntimeRedisInternalHost
+	}
+	if c.Password == "" {
+		c.Password = DefaultDockerRuntimeRedisPassword
+	}
 	return nil
 }
 
 type DockerRuntimeZipkinConfig struct {
-	Name    string
-	Image   string
-	Cmd     []string
-	Network string
-	Ports   []string
+	Name         string
+	Image        string
+	Cmd          []string
+	Network      string
+	Ports        []string
+	ExternalHost string
+	InternalHost string
 }
 
 func (c *DockerRuntimeZipkinConfig) Default() error {
@@ -118,15 +169,23 @@ func (c *DockerRuntimeZipkinConfig) Default() error {
 	if c.Network == "" {
 		c.Network = DefaultDockerRuntimeZipkinNetwork
 	}
+	if c.ExternalHost == "" {
+		c.ExternalHost = DefaultDockerRuntimeZipkinExternalHost
+	}
+	if c.InternalHost == "" {
+		c.InternalHost = DefaultDockerRuntimeZipkinInternalHost
+	}
 	return nil
 }
 
 type DockerRuntimePlacementConfig struct {
-	Name    string
-	Image   string
-	Cmd     []string
-	Network string
-	Ports   []string
+	Name         string
+	Image        string
+	Cmd          []string
+	Network      string
+	Ports        []string
+	ExternalHost string
+	InternalHost string
 }
 
 func (c *DockerRuntimePlacementConfig) Default() error {
@@ -145,6 +204,12 @@ func (c *DockerRuntimePlacementConfig) Default() error {
 	if c.Network == "" {
 		c.Network = DefaultDockerRuntimePlacementNetwork
 	}
+	if c.ExternalHost == "" {
+		c.ExternalHost = DefaultDockerRuntimePlacementExternalHost
+	}
+	if c.InternalHost == "" {
+		c.InternalHost = DefaultDockerRuntimePlacementInternalHost
+	}
 	return nil
 }
 
@@ -154,6 +219,7 @@ type DockerRuntimeIngressConfig struct {
 	Cmd     []string
 	Network string
 	Ports   []string
+	Volumes []string
 }
 
 func (c *DockerRuntimeIngressConfig) Default() error {
@@ -166,11 +232,14 @@ func (c *DockerRuntimeIngressConfig) Default() error {
 	if len(c.Cmd) == 0 {
 		c.Cmd = DefaultDockerRuntimeIngressCmd
 	}
+	if c.Network == "" {
+		c.Network = DefaultDockerRuntimeIngressNetwork
+	}
 	if len(c.Ports) == 0 {
 		c.Ports = DefaultDockerRuntimeIngressPorts
 	}
-	if c.Network == "" {
-		c.Network = DefaultDockerRuntimeIngressNetwork
+	if len(c.Volumes) == 0 {
+		c.Volumes = DefaultDockerRuntimeIngressVolumes
 	}
 	return nil
 }
@@ -225,6 +294,7 @@ type DockerRuntimeConfig struct {
 	Debug     bool
 	Network   string
 	Volumes   []string
+	Tools     DockerRuntimeToolsConfig
 	Redis     DockerRuntimeRedisConfig
 	Zipkin    DockerRuntimeZipkinConfig
 	Placement DockerRuntimePlacementConfig
@@ -239,6 +309,9 @@ func (c *DockerRuntimeConfig) Default() error {
 	}
 	if len(c.Volumes) == 0 {
 		c.Volumes = DefaultDockerRuntimeVolumes
+	}
+	if err := c.Tools.Default(); err != nil {
+		return err
 	}
 	if err := c.Redis.Default(); err != nil {
 		return err
@@ -285,7 +358,8 @@ func NewDockerRuntime(config DockerRuntimeConfig) (*DockerRuntime, error) {
 }
 
 func (r *DockerRuntime) Install(ctx context.Context) error {
-	if err := r.createNetwork(ctx, r.config.Network); err != nil {
+	externalDaprConfigs := r.getDaprConfigs(r.config.Zipkin.ExternalHost, r.config.Redis.ExternalHost, r.config.Redis.Password)
+	if err := externalDaprConfigs.Save(); err != nil {
 		return err
 	}
 
@@ -293,6 +367,23 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 		if err := r.createVolume(ctx, volume); err != nil {
 			return err
 		}
+
+	}
+
+	configsVolume := r.findConfigsVolume(r.config.Ingress.Volumes)
+	if configsVolume != "" {
+		internalDaprConfigs := r.getDaprConfigs(r.config.Zipkin.InternalHost, r.config.Redis.InternalHost, r.config.Redis.Password)
+		buf, err := internalDaprConfigs.Buffer()
+		if err != nil {
+			return err
+		}
+		if err := r.copyToVolume(ctx, configsVolume, buf); err != nil {
+			return err
+		}
+	}
+
+	if err := r.createNetwork(ctx, r.config.Network); err != nil {
+		return err
 	}
 
 	if err := r.runContainer(ctx, DockerRuntimeRunContainerOptions{
@@ -340,6 +431,7 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 		Cmd:     r.config.Ingress.Cmd,
 		Network: r.config.Ingress.Network,
 		Ports:   r.config.Ingress.Ports,
+		Volumes: r.config.Ingress.Volumes,
 		Labels: r.labels(map[string]string{
 			"kess-system": "ingress",
 		}),
@@ -498,7 +590,7 @@ func (r *DockerRuntime) runContainer(ctx context.Context, options DockerRuntimeR
 }
 
 func (r *DockerRuntime) removeContainer(ctx context.Context, name string) error {
-	if err := r.client.ContainerRemove(ctx, name, types.ContainerRemoveOptions{Force: true}); err != nil {
+	if err := r.client.ContainerRemove(ctx, name, types.ContainerRemoveOptions{Force: true, RemoveVolumes: true}); err != nil {
 		if !client.IsErrNotFound(err) {
 			return errors.WithStack(err)
 		}
@@ -542,10 +634,70 @@ func (r *DockerRuntime) removeNetwork(ctx context.Context, name string) error {
 	return nil
 }
 
+func (r *DockerRuntime) copyToVolume(ctx context.Context, volume string, reader io.Reader) error {
+	dist := strings.SplitN(volume, ":", 2)[1]
+
+	containerName := r.renderName(r.config.Tools.Name, map[string]interface{}{"Time": strconv.FormatInt(time.Now().Unix(), 10)})
+	if err := r.runContainer(ctx, DockerRuntimeRunContainerOptions{
+		Name:    containerName,
+		Image:   r.config.Tools.Image,
+		Cmd:     r.config.Tools.Cmd,
+		Volumes: []string{volume},
+		Labels: r.labels(map[string]string{
+			"kess-tools": "",
+		}),
+	}); err != nil {
+		return err
+	}
+
+	if err := r.client.CopyToContainer(ctx, containerName, dist, reader, types.CopyToContainerOptions{}); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err := r.removeContainer(ctx, containerName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *DockerRuntime) labels(m map[string]string) map[string]string {
 	l := map[string]string{"kess": ""}
 	for k, v := range m {
 		l[k] = v
 	}
 	return l
+}
+
+func (r *DockerRuntime) findConfigsVolume(volumes []string) string {
+	for _, volume := range volumes {
+		if strings.HasPrefix(volume, "kess-configs") {
+			return volume
+		}
+	}
+	return ""
+}
+
+func (r *DockerRuntime) getDaprConfigs(zipkinHost string, redisHost string, redisPassword string) *dapr.Configs {
+	daprConfigs := dapr.DefaultConfigs()
+	daprConfigs.SetConfiguration(dapr.CreateConfiguration("kess", dapr.ConfigurationSpec{
+		Tracing: dapr.ConfigurationSpecTracing{
+			SamplingRate: "1",
+			Zipkin: dapr.ConfigurationSpecTracingZipkin{
+				EndpointAddress: fmt.Sprintf("http://%s/api/v2/spans", zipkinHost),
+			},
+		},
+	}))
+	daprConfigs.SetComponents([]dapr.Component{
+		dapr.CreateRedisStateStoreComponent("statestore", dapr.RedisStateStoreComponentOptions{
+			Host:            redisHost,
+			Password:        redisPassword,
+			ActorStateStore: true,
+		}),
+		dapr.CreateRedisPubsubComponent("pubsub", dapr.RedisPubsubComponentOptions{
+			Host:     redisHost,
+			Password: redisPassword,
+		}),
+	})
+	return daprConfigs
 }

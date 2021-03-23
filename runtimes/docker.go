@@ -357,7 +357,11 @@ func NewDockerRuntime(config DockerRuntimeConfig) (*DockerRuntime, error) {
 	return &r, nil
 }
 
-func (r *DockerRuntime) Install(ctx context.Context) error {
+func (r *DockerRuntime) Install(ctx context.Context, options RuntimeInstallOptions) error {
+	if err := dapr.StandaloneInstall(options.RuntimeVersion, options.DashboardVersion); err != nil {
+		return err
+	}
+
 	externalDaprConfigs := r.getDaprConfigs(r.config.Zipkin.ExternalHost, r.config.Redis.ExternalHost, r.config.Redis.Password)
 	if err := externalDaprConfigs.Save(); err != nil {
 		return err
@@ -442,7 +446,7 @@ func (r *DockerRuntime) Install(ctx context.Context) error {
 	return nil
 }
 
-func (r *DockerRuntime) Uninstall(ctx context.Context) error {
+func (r *DockerRuntime) Uninstall(ctx context.Context, options RuntimeUninstallOptions) error {
 	filters := filters.NewArgs(filters.Arg("label", "kess"))
 
 	containers, err := r.client.ContainerList(ctx, types.ContainerListOptions{All: true, Filters: filters})
@@ -476,6 +480,10 @@ func (r *DockerRuntime) Uninstall(ctx context.Context) error {
 		if err := r.removeNetwork(ctx, network.ID); err != nil {
 			return err
 		}
+	}
+
+	if err := dapr.StandaloneUninstall(); err != nil {
+		return err
 	}
 
 	return nil

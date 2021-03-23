@@ -17,11 +17,11 @@ func NewSlimRuntime(config SlimRuntimeConfig) (*SlimRuntime, error) {
 	return &r, nil
 }
 
-func (r *SlimRuntime) Install(ctx context.Context) error {
+func (r *SlimRuntime) Install(ctx context.Context, options RuntimeInstallOptions) error {
 	return nil
 }
 
-func (r *SlimRuntime) Uninstall(ctx context.Context) error {
+func (r *SlimRuntime) Uninstall(ctx context.Context, options RuntimeUninstallOptions) error {
 	return nil
 }
 

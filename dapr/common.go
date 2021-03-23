@@ -6,8 +6,11 @@ import (
 )
 
 const (
-	DefaultDaprDirname               = ".kess"
+	DefaultDaprDirname               = ".dapr"
 	DefaultDaprBinDirname            = "bin"
+	DefaultDaprPlacementFilename     = "placement"
+	DefaultDaprDaprdFilename         = "daprd"
+	DefaultDaprDashboardDirname      = "dashboard"
 	DefaultDaprComponentsDirname     = "components"
 	DefaultDaprConfigurationFilename = "config.yaml"
 )
@@ -19,6 +22,18 @@ func DefaultDaprDirPath() string {
 
 func DefaultDaprBinPath() string {
 	return filepath.Join(DefaultDaprDirPath(), DefaultDaprBinDirname)
+}
+
+func DefaultDaprPlacementPath() string {
+	return filepath.Join(DefaultDaprBinPath(), DefaultDaprPlacementFilename)
+}
+
+func DefaultDaprDaprdPath() string {
+	return filepath.Join(DefaultDaprBinPath(), DefaultDaprDaprdFilename)
+}
+
+func DefaultDaprDashboardPath() string {
+	return filepath.Join(DefaultDaprBinPath(), DefaultDaprDashboardDirname)
 }
 
 func DefaultComponentsDirPath() string {

@@ -47,11 +47,11 @@ func NewKubernetesRuntime(config KubernetesRuntimeConfig) (*KubernetesRuntime, e
 	return &r, nil
 }
 
-func (r *KubernetesRuntime) Install(ctx context.Context) error {
+func (r *KubernetesRuntime) Install(ctx context.Context, options RuntimeInstallOptions) error {
 	return nil
 }
 
-func (r *KubernetesRuntime) Uninstall(ctx context.Context) error {
+func (r *KubernetesRuntime) Uninstall(ctx context.Context, options RuntimeUninstallOptions) error {
 	return nil
 }
 

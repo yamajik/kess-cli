@@ -7,8 +7,8 @@ import (
 )
 
 type Runtime interface {
-	Install(ctx context.Context) error
-	Uninstall(ctx context.Context) error
+	Install(ctx context.Context, options RuntimeInstallOptions) error
+	Uninstall(ctx context.Context, options RuntimeUninstallOptions) error
 	Run(ctx context.Context, options RuntimeRunOptions) error
 	// RunProcess(ctx context.Context, options RuntimeRunProcessOptions) error
 	Remove(ctx context.Context, options RuntimeRemoveOptions) error
@@ -19,6 +19,14 @@ type RuntimeConfig struct {
 	Slim       SlimRuntimeConfig
 	Docker     DockerRuntimeConfig
 	Kubernetes KubernetesRuntimeConfig
+}
+
+type RuntimeInstallOptions struct {
+	RuntimeVersion   string
+	DashboardVersion string
+}
+
+type RuntimeUninstallOptions struct {
 }
 
 type RuntimeRunOptions struct {

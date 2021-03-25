@@ -13,6 +13,8 @@ const (
 	DefaultDaprDashboardDirname      = "dashboard"
 	DefaultDaprComponentsDirname     = "components"
 	DefaultDaprConfigurationFilename = "config.yaml"
+	DefaultAppWaitTimeoutInSeconds   = 60
+	DefaultRandomPort                = -1
 )
 
 func DefaultDaprDirPath() string {

@@ -36,7 +36,7 @@ type StandaloneRunConfig struct {
 
 func (c *StandaloneRunConfig) Default() error {
 	if c.AppWaitTimeoutInSeconds == 0 {
-		c.AppWaitTimeoutInSeconds = 60
+		c.AppWaitTimeoutInSeconds = DefaultAppWaitTimeoutInSeconds
 	}
 	return nil
 }

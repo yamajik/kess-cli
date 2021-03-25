@@ -496,6 +496,41 @@ func (r *DockerRuntime) Run(ctx context.Context, options RuntimeRunOptions) erro
 	return r.runDocker(ctx, options)
 }
 
+func (r *DockerRuntime) Remove(ctx context.Context, options RuntimeRemoveOptions) error {
+	m := structs.Map(options)
+
+	if err := r.removeContainer(ctx, r.renderName(r.config.Sidecar.Name, m)); err != nil {
+		return err
+	}
+
+	if err := r.removeContainer(ctx, r.renderName(r.config.App.Name, m)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *DockerRuntime) Logs(ctx context.Context, options RuntimeLogsOptions) error {
+	m := structs.Map(options)
+
+	reader, err := r.client.ContainerLogs(ctx, r.renderName(r.config.App.Name, m), types.ContainerLogsOptions{
+		ShowStderr: true,
+		ShowStdout: true,
+		Timestamps: false,
+		Follow:     options.Follow,
+		Tail:       options.Tail,
+	})
+	if err != nil {
+		return nil
+	}
+	io.Copy(os.Stdout, reader)
+	return nil
+}
+
+func (r *DockerRuntime) renderName(tpl string, m map[string]interface{}) string {
+	return fasttemplate.New(tpl, "{", "}").ExecuteString(m)
+}
+
 func (r *DockerRuntime) runDocker(ctx context.Context, options RuntimeRunOptions) error {
 	m := map[string]interface{}{"AppID": options.AppID}
 
@@ -537,24 +572,6 @@ func (r *DockerRuntime) runDocker(ctx context.Context, options RuntimeRunOptions
 func (r *DockerRuntime) runProcess(ctx context.Context, options RuntimeRunOptions) error {
 	dapr.StandaloneRun(&options.StandaloneRunConfig)
 	return nil
-}
-
-func (r *DockerRuntime) Remove(ctx context.Context, options RuntimeRemoveOptions) error {
-	m := structs.Map(options)
-
-	if err := r.removeContainer(ctx, r.renderName(r.config.Sidecar.Name, m)); err != nil {
-		return err
-	}
-
-	if err := r.removeContainer(ctx, r.renderName(r.config.App.Name, m)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *DockerRuntime) renderName(tpl string, m map[string]interface{}) string {
-	return fasttemplate.New(tpl, "{", "}").ExecuteString(m)
 }
 
 type DockerRuntimeRunContainerOptions struct {

@@ -62,3 +62,7 @@ func (r *KubernetesRuntime) Run(ctx context.Context, options RuntimeRunOptions) 
 func (r *KubernetesRuntime) Remove(ctx context.Context, options RuntimeRemoveOptions) error {
 	return nil
 }
+
+func (r *KubernetesRuntime) Logs(ctx context.Context, options RuntimeLogsOptions) error {
+	return nil
+}

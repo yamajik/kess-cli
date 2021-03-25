@@ -12,6 +12,7 @@ type Runtime interface {
 	Uninstall(ctx context.Context, options RuntimeUninstallOptions) error
 	Run(ctx context.Context, options RuntimeRunOptions) error
 	Remove(ctx context.Context, options RuntimeRemoveOptions) error
+	Logs(ctx context.Context, options RuntimeLogsOptions) error
 }
 
 type RuntimeConfig struct {
@@ -36,6 +37,12 @@ type RuntimeRunOptions struct {
 
 type RuntimeRemoveOptions struct {
 	AppID string
+}
+
+type RuntimeLogsOptions struct {
+	AppID  string
+	Follow bool
+	Tail   string
 }
 
 func New(config RuntimeConfig) (Runtime, error) {

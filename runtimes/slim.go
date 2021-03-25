@@ -32,3 +32,7 @@ func (r *SlimRuntime) Run(ctx context.Context, options RuntimeRunOptions) error 
 func (r *SlimRuntime) Remove(ctx context.Context, options RuntimeRemoveOptions) error {
 	return nil
 }
+
+func (r *SlimRuntime) Logs(ctx context.Context, options RuntimeLogsOptions) error {
+	return nil
+}

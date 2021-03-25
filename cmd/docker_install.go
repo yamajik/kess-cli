@@ -21,7 +21,7 @@ var (
 )
 
 func init() {
-	DockerInstallCMD.PersistentFlags().StringVar(&dockerInstallOptions.RuntimeVersion, "runtime-version", "latest", "The version of the Dapr runtime to install, for example: 1.0.0")
-	DockerInstallCMD.PersistentFlags().StringVar(&dockerInstallOptions.DashboardVersion, "dashboard-version", "latest", "The version of the Dapr dashboard to install, for example: 1.0.0")
+	DockerInstallCMD.PersistentFlags().StringVarP(&dockerInstallOptions.RuntimeVersion, "runtime-version", "", "latest", "The version of the Dapr runtime to install, for example: 1.0.0")
+	DockerInstallCMD.PersistentFlags().StringVarP(&dockerInstallOptions.DashboardVersion, "dashboard-version", "", "latest", "The version of the Dapr dashboard to install, for example: 1.0.0")
 	DockerCMD.AddCommand(DockerInstallCMD)
 }

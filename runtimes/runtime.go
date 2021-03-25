@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/yamajik/kess/dapr"
 )
 
 type Runtime interface {
 	Install(ctx context.Context, options RuntimeInstallOptions) error
 	Uninstall(ctx context.Context, options RuntimeUninstallOptions) error
 	Run(ctx context.Context, options RuntimeRunOptions) error
-	// RunProcess(ctx context.Context, options RuntimeRunProcessOptions) error
 	Remove(ctx context.Context, options RuntimeRemoveOptions) error
 }
 
@@ -30,21 +30,12 @@ type RuntimeUninstallOptions struct {
 }
 
 type RuntimeRunOptions struct {
-	Name  string
-	Image string
-	Cmd   []string
-	Port  string
-}
-
-type RuntimeRunProcessOptions struct {
-	Name string
-	Cmd  []string
-	Port string
-	Pwd  string
+	dapr.StandaloneRunConfig
+	AppImage string
 }
 
 type RuntimeRemoveOptions struct {
-	Name string
+	AppID string
 }
 
 func New(config RuntimeConfig) (Runtime, error) {

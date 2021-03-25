@@ -21,7 +21,7 @@ var (
 )
 
 func init() {
-	DockerRemoveCMD.PersistentFlags().StringVarP(&dockerRemoveOptions.Name, "name", "n", "", "The id for your application, used for service discovery")
+	DockerRemoveCMD.PersistentFlags().StringVarP(&dockerRemoveOptions.AppID, "app-id", "a", "", "The id for your application, used for service discovery")
 	DockerRemoveCMD.MarkPersistentFlagRequired("name")
 	DockerCMD.AddCommand(DockerRemoveCMD)
 }

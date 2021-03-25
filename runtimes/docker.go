@@ -25,7 +25,7 @@ var (
 	DefaultDockerRuntimeNetwork = "kess"
 	DefaultDockerRuntimeVolumes = []string{"kess-configs"}
 
-	DefaultDockerRuntimeToolsName  = "kess-tools-{Time}"
+	DefaultDockerRuntimeToolsName  = "kess-tools-{Suffix}"
 	DefaultDockerRuntimeToolsImage = "alpine:latest"
 	DefaultDockerRuntimeToolsCmd   = []string{"sleep", "infinity"}
 
@@ -69,7 +69,7 @@ var (
 	DefaultDockerRuntimeIngressPorts   = []string{"50001:50001", "50002:50002"}
 	DefaultDockerRuntimeIngressVolumes = []string{"kess-configs:/kess-configs"}
 
-	DefaultDockerRuntimeSidecarName  = "kess-app-{Name}-sidecar"
+	DefaultDockerRuntimeSidecarName  = "kess-app-{AppID}-sidecar"
 	DefaultDockerRuntimeSidecarImage = "daprio/daprd:edge"
 	DefaultDockerRuntimeSidecarCmd   = []string{
 		"./daprd",
@@ -77,10 +77,10 @@ var (
 		"--components-path", "/kess-configs/components",
 		"--config", "/kess-configs/config.yaml",
 	}
-	DefaultDockerRuntimeSidecarNetwork = "container:{Name}"
+	DefaultDockerRuntimeSidecarNetwork = "container:{Container}"
 	DefaultDockerRuntimeSidecarVolumes = []string{"kess-configs:/kess-configs"}
 
-	DefaultDockerRuntimeAppName    = "kess-app-{Name}"
+	DefaultDockerRuntimeAppName    = "kess-app-{AppID}"
 	DefaultDockerRuntimeAppNetwork = DefaultDockerRuntimeNetwork
 	DefaultDockerRuntimeAppVolumes = []string{}
 )
@@ -490,7 +490,14 @@ func (r *DockerRuntime) Uninstall(ctx context.Context, options RuntimeUninstallO
 }
 
 func (r *DockerRuntime) Run(ctx context.Context, options RuntimeRunOptions) error {
-	m := structs.Map(options)
+	if options.AppImage == "" {
+		return r.runProcess(ctx, options)
+	}
+	return r.runDocker(ctx, options)
+}
+
+func (r *DockerRuntime) runDocker(ctx context.Context, options RuntimeRunOptions) error {
+	m := map[string]interface{}{"AppID": options.AppID}
 
 	if err := r.createNetwork(ctx, r.config.App.Network); err != nil {
 		return err
@@ -499,12 +506,12 @@ func (r *DockerRuntime) Run(ctx context.Context, options RuntimeRunOptions) erro
 	appContainerName := r.renderName(r.config.App.Name, m)
 	if err := r.runContainer(ctx, DockerRuntimeRunContainerOptions{
 		Name:    appContainerName,
-		Image:   options.Image,
-		Cmd:     options.Cmd,
+		Image:   options.AppImage,
+		Cmd:     options.Arguments,
 		Network: r.config.App.Network,
 		Volumes: r.config.App.Volumes,
 		Labels: r.labels(map[string]string{
-			"kess-app": options.Name,
+			"kess-app": options.AppID,
 		}),
 	}); err != nil {
 		return err
@@ -513,17 +520,22 @@ func (r *DockerRuntime) Run(ctx context.Context, options RuntimeRunOptions) erro
 	if err := r.runContainer(ctx, DockerRuntimeRunContainerOptions{
 		Name:    r.renderName(r.config.Sidecar.Name, m),
 		Image:   r.config.Sidecar.Image,
-		Cmd:     append(r.config.Sidecar.Cmd, "--app-id", options.Name, "--app-port", options.Port),
-		Network: r.renderName(r.config.Sidecar.Network, map[string]interface{}{"Name": appContainerName}),
+		Cmd:     append(r.config.Sidecar.Cmd, "--app-id", options.AppID, "--app-port", strconv.Itoa(options.AppPort)),
+		Network: r.renderName(r.config.Sidecar.Network, map[string]interface{}{"Container": appContainerName}),
 		Volumes: r.config.Sidecar.Volumes,
 		Labels: r.labels(map[string]string{
-			"kess-app":         options.Name,
-			"kess-app-sidecar": options.Name,
+			"kess-app":         options.AppID,
+			"kess-app-sidecar": options.AppID,
 		}),
 	}); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (r *DockerRuntime) runProcess(ctx context.Context, options RuntimeRunOptions) error {
+	dapr.StandaloneRun(&options.StandaloneRunConfig)
 	return nil
 }
 
@@ -645,7 +657,7 @@ func (r *DockerRuntime) removeNetwork(ctx context.Context, name string) error {
 func (r *DockerRuntime) copyToVolume(ctx context.Context, volume string, reader io.Reader) error {
 	dist := strings.SplitN(volume, ":", 2)[1]
 
-	containerName := r.renderName(r.config.Tools.Name, map[string]interface{}{"Time": strconv.FormatInt(time.Now().Unix(), 10)})
+	containerName := r.renderName(r.config.Tools.Name, map[string]interface{}{"Suffix": strconv.FormatInt(time.Now().Unix(), 10)})
 	if err := r.runContainer(ctx, DockerRuntimeRunContainerOptions{
 		Name:    containerName,
 		Image:   r.config.Tools.Image,

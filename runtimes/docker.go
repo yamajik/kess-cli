@@ -527,6 +527,11 @@ func (r *DockerRuntime) Logs(ctx context.Context, options RuntimeLogsOptions) er
 	return nil
 }
 
+func (r *DockerRuntime) Dashboard(ctx context.Context, options RuntimeDashboardOptions) error {
+	dapr.DashboardRun(&options.DashboardRunConfig)
+	return nil
+}
+
 func (r *DockerRuntime) renderName(tpl string, m map[string]interface{}) string {
 	return fasttemplate.New(tpl, "{", "}").ExecuteString(m)
 }

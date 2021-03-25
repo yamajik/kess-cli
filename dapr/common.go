@@ -15,6 +15,7 @@ const (
 	DefaultDaprConfigurationFilename = "config.yaml"
 	DefaultAppWaitTimeoutInSeconds   = 60
 	DefaultRandomPort                = -1
+	DefaultDashboardPort             = 8000
 )
 
 func DefaultDaprDirPath() string {

@@ -13,6 +13,7 @@ type Runtime interface {
 	Run(ctx context.Context, options RuntimeRunOptions) error
 	Remove(ctx context.Context, options RuntimeRemoveOptions) error
 	Logs(ctx context.Context, options RuntimeLogsOptions) error
+	Dashboard(ctx context.Context, options RuntimeDashboardOptions) error
 }
 
 type RuntimeConfig struct {
@@ -43,6 +44,10 @@ type RuntimeLogsOptions struct {
 	AppID  string
 	Follow bool
 	Tail   string
+}
+
+type RuntimeDashboardOptions struct {
+	dapr.DashboardRunConfig
 }
 
 func New(config RuntimeConfig) (Runtime, error) {

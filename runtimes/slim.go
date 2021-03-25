@@ -36,3 +36,7 @@ func (r *SlimRuntime) Remove(ctx context.Context, options RuntimeRemoveOptions) 
 func (r *SlimRuntime) Logs(ctx context.Context, options RuntimeLogsOptions) error {
 	return nil
 }
+
+func (r *SlimRuntime) Dashboard(ctx context.Context, options RuntimeDashboardOptions) error {
+	return nil
+}

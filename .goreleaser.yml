@@ -6,7 +6,6 @@ env_files:
   # use only one or release will fail!
   github_token: ./rcs/github
 
-
 before:
   hooks:
     # you may remove this if you don't use vgo
@@ -59,7 +58,6 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
-
 # brews:
 #   - # Name template of the recipe
 #     # Default to project name

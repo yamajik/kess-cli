@@ -599,9 +599,11 @@ func (r *DockerRuntime) runContainer(ctx context.Context, options DockerRuntimeR
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		var writers []io.Writer
 		if r.config.Debug {
-			io.Copy(os.Stdout, reader)
+			writers = append(writers, os.Stdout)
 		}
+		io.Copy(io.MultiWriter(writers...), reader)
 	}
 
 	exposedports, portbindings, err := nat.ParsePortSpecs(options.Ports)
